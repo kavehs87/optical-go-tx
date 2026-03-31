@@ -5,10 +5,21 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
+
+	// Handle global messages
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		m.updateFrameSize()
+		// Always keep file picker height in sync
+		m.filePicker.SetHeight(m.height - 5)
+	}
 
 	switch m.state {
 	case statePicking:
@@ -70,10 +81,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tick(m.delay)
 			}
 
-		case tea.WindowSizeMsg:
-			m.width = msg.Width
-			m.height = msg.Height
-			m.updateFrameSize()
 		}
 	}
 
@@ -81,9 +88,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) updateFrameSize() {
-	// Header/Footer take some space.
-	// Header is 1 line, Footer is 1 line.
-	availableHeight := m.height - 2
+	// Header/Footer take dynamic space based on width.
+	headerHeight := lipgloss.Height(m.renderHeader())
+	footerHeight := lipgloss.Height(m.renderFooter())
+	availableHeight := m.height - headerHeight - footerHeight
 	if availableHeight < 0 {
 		availableHeight = 0
 	}

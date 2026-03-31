@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -82,9 +83,10 @@ func nextID() int {
 
 // New returns a new filepicker model with default styling and key bindings.
 func New() Model {
+	dir, _ := os.Getwd()
 	return Model{
 		id:               nextID(),
-		CurrentDirectory: ".",
+		CurrentDirectory: dir,
 		Cursor:           ">",
 		AllowedTypes:     []string{},
 		selected:         0,
@@ -237,15 +239,20 @@ func (m Model) readDir(path string, showHidden bool) tea.Cmd {
 			return dirEntries[i].IsDir()
 		})
 
-		if showHidden {
-			return readDirMsg{id: m.id, entries: dirEntries}
+		var sanitizedDirEntries []os.DirEntry
+
+		// Add parent directory option if not at root
+		parent := filepath.Dir(path)
+		if parent != path {
+			sanitizedDirEntries = append(sanitizedDirEntries, parentDir{})
 		}
 
-		var sanitizedDirEntries []os.DirEntry
 		for _, dirEntry := range dirEntries {
-			isHidden, _ := IsHidden(dirEntry.Name())
-			if isHidden {
-				continue
+			if !showHidden {
+				isHidden, _ := IsHidden(dirEntry.Name())
+				if isHidden {
+					continue
+				}
 			}
 			sanitizedDirEntries = append(sanitizedDirEntries, dirEntry)
 		}
@@ -342,7 +349,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				m.maxIdx = m.minIdx + m.Height()
 			}
 		case matches(msg, m.KeyMap.Back):
-			m.CurrentDirectory = filepath.Dir(m.CurrentDirectory)
+			parent := filepath.Dir(m.CurrentDirectory)
+			if parent == m.CurrentDirectory {
+				break
+			}
+			m.CurrentDirectory = parent
 			if m.selectedStack.Length() > 0 {
 				m.selected, m.minIdx, m.maxIdx = m.popView()
 			} else {
@@ -386,11 +397,22 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				break
 			}
 
-			m.CurrentDirectory = filepath.Join(m.CurrentDirectory, f.Name())
-			m.pushView(m.selected, m.minIdx, m.maxIdx)
-			m.selected = 0
-			m.minIdx = 0
-			m.maxIdx = m.Height() - 1
+			if f.Name() == ".." {
+				m.CurrentDirectory = filepath.Dir(m.CurrentDirectory)
+				if m.selectedStack.Length() > 0 {
+					m.selected, m.minIdx, m.maxIdx = m.popView()
+				} else {
+					m.selected = 0
+					m.minIdx = 0
+					m.maxIdx = m.Height() - 1
+				}
+			} else {
+				m.CurrentDirectory = filepath.Join(m.CurrentDirectory, f.Name())
+				m.pushView(m.selected, m.minIdx, m.maxIdx)
+				m.selected = 0
+				m.minIdx = 0
+				m.maxIdx = m.Height() - 1
+			}
 			return m, m.readDir(m.CurrentDirectory, m.ShowHidden)
 		}
 	}
@@ -399,10 +421,18 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 // View returns the view of the file picker.
 func (m Model) View() string {
-	if len(m.files) == 0 {
-		return m.Styles.EmptyDirectory.Height(m.Height()).MaxHeight(m.Height()).String()
-	}
 	var s strings.Builder
+
+	s.WriteString(m.Styles.Directory.Render(" Current Directory: "+m.CurrentDirectory) + "\n\n")
+
+	if len(m.files) == 0 {
+		s.WriteString(m.Styles.EmptyDirectory.String())
+		// Pad remaining height
+		for i := lipgloss.Height(s.String()); i <= m.Height(); i++ {
+			s.WriteRune('\n')
+		}
+		return s.String()
+	}
 
 	for i, f := range m.files {
 		if i < m.minIdx || i > m.maxIdx {
@@ -554,3 +584,19 @@ func (m Model) HighlightedPath() string {
 	}
 	return filepath.Join(m.CurrentDirectory, m.files[m.selected].Name())
 }
+
+type parentDir struct{}
+
+func (p parentDir) Name() string               { return ".." }
+func (p parentDir) IsDir() bool                { return true }
+func (p parentDir) Type() os.FileMode          { return os.ModeDir }
+func (p parentDir) Info() (os.FileInfo, error) { return parentFileInfo{}, nil }
+
+type parentFileInfo struct{}
+
+func (p parentFileInfo) Name() string       { return ".." }
+func (p parentFileInfo) Size() int64        { return 0 }
+func (p parentFileInfo) Mode() os.FileMode  { return os.ModeDir }
+func (p parentFileInfo) ModTime() time.Time { return time.Time{} }
+func (p parentFileInfo) IsDir() bool        { return true }
+func (p parentFileInfo) Sys() interface{}   { return nil }

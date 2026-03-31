@@ -10,6 +10,7 @@ import (
 
 func (m model) View() tea.View {
 	var v tea.View
+	v.AltScreen = true
 
 	if m.width == 0 || m.height == 0 {
 		v.Content = "Initializing..."
@@ -17,14 +18,17 @@ func (m model) View() tea.View {
 	}
 
 	header := m.renderHeader()
-	content := m.renderContent()
 	footer := m.renderFooter()
 
 	// Ensure content has a fixed height based on available space
-	availableHeight := m.height - 2
+	headerHeight := lipgloss.Height(header)
+	footerHeight := lipgloss.Height(footer)
+	availableHeight := m.height - headerHeight - footerHeight
 	if availableHeight < 0 {
 		availableHeight = 0
 	}
+
+	content := m.renderContent()
 	styledContent := lipgloss.NewStyle().Height(availableHeight).MaxHeight(availableHeight).Render(content)
 
 	// Join all sections vertically. JoinVertical handles newlines between elements.
@@ -34,14 +38,16 @@ func (m model) View() tea.View {
 
 func (m model) renderHeader() string {
 	status := "[IDLE]"
+	help := " 'o':open | 'l':loop | 'q':quit | '+/-':speed | 'space':pause "
+
 	if m.state == stateEncoding {
 		status = "[ENCODING]"
 	} else if m.state == statePicking {
 		status = "[PICKING]"
+		help = " 'h/esc':back | 'enter':select | 'j/k':up/down "
 	}
 
 	title := fmt.Sprintf(" Optical Transfer Encoder %s ", status)
-	help := " 'o':open | 'l':loop | 'q':quit | '+/-':speed | 'space':pause "
 	delayStr := fmt.Sprintf(" Delay: %v ", m.delay)
 	
 	loopStatus := "[LOOP: OFF]"
