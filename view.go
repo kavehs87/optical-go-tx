@@ -38,7 +38,7 @@ func (m model) View() tea.View {
 
 func (m model) renderHeader() string {
 	status := "[IDLE]"
-	help := " 'o':open | 'l':loop | 'q':quit | '+/-':speed | 'space':pause "
+	help := " 'o':open | '+/-':speed |"
 
 	if m.state == stateEncoding {
 		status = "[ENCODING]"
@@ -47,9 +47,9 @@ func (m model) renderHeader() string {
 		help = " 'h/esc':back | 'enter':select | 'j/k':up/down "
 	}
 
-	title := fmt.Sprintf(" Optical Transfer Encoder %s ", status)
+	title := fmt.Sprintf("OTE %s ", status)
 	delayStr := fmt.Sprintf(" Delay: %v ", m.delay)
-	
+
 	loopStatus := "[LOOP: OFF]"
 	if m.loop {
 		loopStatus = "[LOOP: ON]"
@@ -69,7 +69,7 @@ func (m model) renderContent() string {
 	}
 
 	// Adjust available area for machine markers
-	// We'll use the top-left block as a "Sync Marker" that toggles 
+	// We'll use the top-left block as a "Sync Marker" that toggles
 	// between White (7) and Black (0) every frame.
 	syncColor := "0"
 	if m.currentIndex%2 == 0 {
@@ -110,7 +110,7 @@ func (m model) renderFooter() string {
 	}
 
 	totalFrames := (len(m.bitChunks) + m.frameSize - 1) / m.frameSize
-	
+
 	// Create a machine-readable binary progress bar
 	// Every 3 bits of the frame index is encoded as one color block
 	var machineProgress strings.Builder
@@ -126,11 +126,11 @@ func (m model) renderFooter() string {
 	if barWidth < 10 {
 		barWidth = 10
 	}
-	
+
 	filled := int(progress * float64(barWidth))
 	empty := barWidth - filled
 	bar := "[" + strings.Repeat("=", filled) + strings.Repeat("-", empty) + "]"
-	
+
 	footerContent := fmt.Sprintf(" PAGE-SYNC: %s   | %s %d/%d frames", machineProgress.String(), bar, m.currentIndex+1, totalFrames)
 	return m.styles.statusBar.Width(m.width).Render(footerContent)
 }
